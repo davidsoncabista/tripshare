@@ -100,18 +100,6 @@ chmod +x install_redis.sh
 ### 3. Solicitar Corrida
 `POST /api/solicitar-corrida`
 > Registra o pedido, persiste no PostgreSQL e inicia o fluxo.
-
-```json
-{
-  "id_passageiro": 1,
-  "origem": "-48.4806,-1.4500",
-  "destino": "-48.4598,-1.4397"
-}
-```
-
-### 3. Solicitar Corrida
-`POST /api/solicitar-corrida`
-> Registra o pedido, persiste no PostgreSQL e inicia o fluxo.
 ```json
 {
   "id_passageiro": 1,
