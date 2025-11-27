@@ -58,6 +58,7 @@ tripshare/
 │   ├── install_backend.sh  # Setup de ambiente Node + PM2
 │   └── nginx/              # Configurações do Gateway
 └── docs/              # Documentação técnica e diagramas
+```
 
 ## 🛠️ Instalação e Reprodução
 
@@ -75,6 +76,9 @@ Cada serviço possui seu script de "Auto Deploy". Exemplo para subir o Banco de 
 cd infra
 chmod +x install_redis.sh
 ./install_redis.sh
+```
+
+---
 
 ## 🔌 API Endpoints
 
@@ -85,11 +89,25 @@ chmod +x install_redis.sh
 ### 2. Simular Corrida
 `POST /api/simular-corrida`
 > Calcula o preço e rota sem salvar no banco.
+
 ```json
 {
   "origem": "-48.4806,-1.4500",
   "destino": "-48.4598,-1.4397"
 }
+```
+
+### 3. Solicitar Corrida
+`POST /api/solicitar-corrida`
+> Registra o pedido, persiste no PostgreSQL e inicia o fluxo.
+
+```json
+{
+  "id_passageiro": 1,
+  "origem": "-48.4806,-1.4500",
+  "destino": "-48.4598,-1.4397"
+}
+```
 
 ### 3. Solicitar Corrida
 `POST /api/solicitar-corrida`
