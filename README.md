@@ -21,6 +21,7 @@ graph TD
         API -->|SQL/Geo| DB[(PostGIS .50)]
         API -->|Rotas/Custo| OSRM[Engine de Mapas .52]
     end
+```
 ### 🧩 Componentes da Infraestrutura
 
 | Serviço | Tecnologia | Função | IP Interno (LXC) |
