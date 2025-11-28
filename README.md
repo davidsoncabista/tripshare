@@ -56,9 +56,16 @@ tripshare/
 │   ├── install_redis.sh    # Script de Hardening + Deploy Redis
 │   ├── install_osrm.sh     # Script de Compilação de Mapas + OSRM
 │   ├── install_backend.sh  # Setup de ambiente Node + PM2
+│   ├── terraform/          # (Roadmap) Provisionamento Declarativo
+│   │   └── main.tf         # Plano de migração para Proxmox API
 │   └── nginx/              # Configurações do Gateway
+│       └── tripshare-api.conf  # Regras de Proxy e WebSocket
 └── docs/              # Documentação técnica e diagramas
 ```
+
+## 🔮 Evolução da Infraestrutura (Terraform)
+
+O projeto inclui um plano de migração (`/infra/terraform/main.tf`) para substituir os scripts de criação manuais por **Terraform**, visando gerenciar o estado da infraestrutura Proxmox de forma declarativa e versionada.
 
 ## 🛠️ Instalação e Reprodução
 
@@ -119,6 +126,7 @@ chmod +x install_redis.sh
 * [ ] Autenticação JWT
 * [ ] Comunicação em Tempo Real (Socket.io + Redis Pub/Sub)
 * [ ] App Mobile (React Native)
+* [ ] Migração da Infraestrutura para Terraform (Provisionamento Declarativo)
 
 ---
 
