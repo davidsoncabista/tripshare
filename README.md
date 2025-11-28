@@ -75,6 +75,48 @@ Este projeto foi desenhado para ser agnóstico, mas os scripts de automação em
 * Servidor Proxmox ou Máquina Linux (Ubuntu 22.04+).
 * Docker e Docker Compose instalados.
 
+### 🔧 Instalação do Terraform (No Shell do Proxmox)
+
+Para executar a criação automática da infraestrutura, o Terraform deve ser instalado no Shell do servidor Proxmox.
+
+**1. Instalar dependências e Chave GPG:**
+```bash
+apt-get update && apt-get install -y gnupg software-properties-common curl
+
+wget -O- [https://apt.releases.hashicorp.com/gpg](https://apt.releases.hashicorp.com/gpg) | \
+gpg --dearmor | \
+tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
+```
+**2. Adicionar Repositório Oficial:**
+ Utilizamos o repositório bookworm (Debian 12) para garantir compatibilidade, mesmo se o Proxmox estiver em versões de teste (Trixie).
+ ```Bash
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+[https://apt.releases.hashicorp.com](https://apt.releases.hashicorp.com) bookworm main" | \
+tee /etc/apt/sources.list.d/hashicorp.list
+```
+**3. Instalar Terraform:**
+```Bash
+apt update && apt-get install terraform -y
+```
+**⚠️ Solução de Problemas (Troubleshooting)**
+e você encontrar o erro Error: Malformed entry 1 in list file ou lsb_release: command not found, significa que a lista de repositórios foi criada incorretamente.
+
+**Como corrigir:**
+
+1. Remova o arquivo de lista corrompido:
+```bash
+rm /etc/apt/sources.list.d/hashicorp.list
+```
+2. Adicione o repositório manualmente fixando a versão estável:
+```bash
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] [https://apt.releases.hashicorp.com](https://apt.releases.hashicorp.com) bookworm main" | tee /etc/apt/sources.list.d/hashicorp.list
+```
+3.Atualize e instale novamente:
+```bash
+apt update && apt install terraform -y
+```
+
+
 ### 2. Subindo os Microsserviços
 Cada serviço possui seu script de "Auto Deploy". Exemplo para subir o Banco de Dados:
 
