@@ -135,8 +135,16 @@ app.post('/api/solicitar-corrida', async (req, res) => {
             });
         }
 
-        console.log(`✅ Sucesso! Corrida #${novaCorrida.id} criada.`);
-        res.json({ sucesso: true, id_corrida: novaCorrida.id, status: 'buscando_moto', valor: preco });
+        console.log(`✅ Sucesso! Corrida #${novaCorrida.id} criada. Valor: R$ ${preco}`);
+
+        res.json({ 
+            sucesso: true, 
+            id_corrida: novaCorrida.id, 
+            status: 'buscando_moto',
+            valor: preco, // <--- MOSTRA O VALOR DA CORRIDA
+            distancia: `${km.toFixed(1)} km`,
+            tempo: `${min.toFixed(0)} min`
+        });
 
     } catch (error) {
         // Isso vai mostrar o erro real no log do servidor em vez de só explodir
