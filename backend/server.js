@@ -4,10 +4,15 @@ const cors = require('cors');
 const axios = require('axios');
 const { Pool } = require('pg');
 const { createClient } = require('redis');
-
-// --- NOVIDADE 1: Importar HTTP e Socket.io ---
 const http = require('http');
 const { Server } = require("socket.io");
+
+// --- VERIFICAÇÃO DE SEGURANÇA ---
+// Se faltar alguma senha, o servidor nem inicia (melhor que quebrar depois)
+if (!process.env.DB_PASS || !process.env.REDIS_URL) {
+    console.error("❌ ERRO FATAL: Variáveis de ambiente (.env) não configuradas!");
+    process.exit(1);
+}
 
 // --- CONFIGURAÇÕES ---
 const PORTA_API = process.env.PORT || 3000;
@@ -15,16 +20,17 @@ const PRECO_BASE = 4.00;
 const PRECO_POR_KM = 1.60;
 const PRECO_POR_MIN = 0.30;
 
-// Infraestrutura
-const OSRM_URL_BASE = process.env.OSRM_URL || 'http://192.168.0.52:5000/route/v1/driving';
+// Infraestrutura (Lê APENAS do .env)
+const OSRM_URL_BASE = process.env.OSRM_URL; // Sem fallback fixo
 const DB_CONFIG = {
-    user: process.env.DB_USER || 'admin',
-    host: process.env.DB_HOST || '192.168.0.50',
-    database: process.env.DB_NAME || 'gisdb',
-    password: process.env.DB_PASS || 'senhaforteaquidobancodedados',
-    port: process.env.DB_PORT || 5432
+    user: process.env.DB_USER,
+    host: process.env.DB_HOST,
+    database: process.env.DB_NAME,
+    password: process.env.DB_PASS, // <--- pega o password do .env
+    port: process.env.DB_PORT
 };
-const REDIS_URL = process.env.REDIS_URL || 'redis://:SenhaForteTripShare2025@192.168.0.51:6379';
+const REDIS_URL = process.env.REDIS_URL; // <--- endereço do Redis
+
 
 // --- INICIALIZAÇÃO ---
 const app = express();
@@ -138,7 +144,7 @@ app.post('/api/solicitar-corrida', async (req, res) => {
 
         console.log(`✅ Sucesso! Corrida #${novaCorrida.id} criada. Valor: R$ ${preco}`);
 
-        res.json({ 
+        res.json({ //Davidson esteve aqui
             sucesso: true, 
             id_corrida: novaCorrida.id, 
             status: 'buscando_moto',
@@ -160,3 +166,4 @@ app.post('/api/solicitar-corrida', async (req, res) => {
 server.listen(PORTA_API, () => {
     console.log(`🚀 TripShare Backend rodando na porta ${PORTA_API}`);
 });
+//codigo by davidson
