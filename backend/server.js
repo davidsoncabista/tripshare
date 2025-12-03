@@ -6,9 +6,13 @@ const { Pool } = require('pg');
 const { createClient } = require('redis');
 const http = require('http');
 const { Server } = require("socket.io");
+// --- SEGURANÇA sistema de autenticação ---
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // --- VERIFICAÇÃO DE SEGURANÇA ---
-// Se faltar alguma senha, o servidor nem inicia (melhor que quebrar depois)
+// Se faltar alguma senha, o servidor nem inicia (melhor que quebrar depois) confia em mim
 if (!process.env.DB_PASS || !process.env.REDIS_URL) {
     console.error("❌ ERRO FATAL: Variáveis de ambiente (.env) não configuradas!");
     process.exit(1);
@@ -210,6 +214,91 @@ app.post('/api/aceitar-corrida', async (req, res) => {
     } catch (error) {
         console.error("Erro ao aceitar corrida:", error);
         res.status(500).json({ erro: 'Erro interno' });
+    }
+});
+
+// ========================================================
+// AUTENTICAÇÃO: CADASTRO E LOGIN 🔐
+// ========================================================
+
+// 1. CADASTRAR USUÁRIO (Cria senha criptografada)
+app.post('/api/cadastrar', async (req, res) => {
+    const { nome, email, senha, tipo, telefone } = req.body; // tipo = 'motorista' ou 'passageiro'
+
+    if (!nome || !email || !senha || !tipo) {
+        return res.status(400).json({ erro: 'Preencha todos os campos.' });
+    }
+
+    try {
+        // Criptografar a senha (Hash)
+        const salt = await bcrypt.genSalt(10);
+        const senhaHash = await bcrypt.hash(senha, salt);
+
+        const query = `
+            INSERT INTO usuarios (nome, email, senha_hash, tipo, telefone)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, nome, email, tipo;
+        `;
+        
+        const dbRes = await pool.query(query, [nome, email, senhaHash, tipo, telefone]);
+        
+        res.json({ sucesso: true, usuario: dbRes.rows[0] });
+
+    } catch (error) {
+        console.error("Erro cadastro:", error);
+        if (error.code === '23505') { // Código do Postgres para "Email duplicado"
+            return res.status(409).json({ erro: 'Email já cadastrado.' });
+        }
+        res.status(500).json({ erro: 'Erro interno.' });
+    }
+});
+
+// 2. LOGIN (Verifica senha e gera Token JWT)
+app.post('/api/login', async (req, res) => {
+    const { email, senha } = req.body;
+
+    try {
+        // Busca o usuário pelo email
+        const userQuery = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
+        
+        if (userQuery.rowCount === 0) {
+            return res.status(404).json({ erro: 'Usuário não encontrado.' });
+        }
+
+        const usuario = userQuery.rows[0];
+
+        // Compara a senha enviada com a senha criptografada no banco
+        const senhaValida = await bcrypt.compare(senha, usuario.senha_hash);
+
+        if (!senhaValida) {
+            // Se a senha antiga do banco for texto puro (ex: seeds), isso falha.
+            // Para produção, sempre use bcrypt.
+            return res.status(401).json({ erro: 'Senha incorreta.' });
+        }
+
+        // Gera o Token JWT (O "Crachá")
+        // Esse token expira em 24 horas
+        const token = jwt.sign(
+            { id: usuario.id, tipo: usuario.tipo, nome: usuario.nome },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        console.log(`🔑 Login realizado: ${usuario.email} (${usuario.tipo})`);
+
+        res.json({
+            sucesso: true,
+            token: token,
+            usuario: {
+                id: usuario.id,
+                nome: usuario.nome,
+                tipo: usuario.tipo
+            }
+        });
+
+    } catch (error) {
+        console.error("Erro login:", error);
+        res.status(500).json({ erro: 'Erro interno no login.' });
     }
 });
 
