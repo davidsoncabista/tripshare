@@ -88,7 +88,6 @@ app.post('/api/solicitar-corrida', async (req, res) => {
             return res.status(400).json({ erro: 'Dados incompletos' });
         }
 
-        // --- CORREÇÃO DE FORMATO ---
         // Garante que seja string antes de dar split
         const strOrigem = String(origem);
         const strDestino = String(destino);
@@ -162,8 +161,60 @@ app.post('/api/solicitar-corrida', async (req, res) => {
     }
 });
 
+// ========================================================
+// NOVA ROTA: MOTORISTA ACEITA A CORRIDA 🤝
+// ========================================================
+app.post('/api/aceitar-corrida', async (req, res) => {
+    const { id_corrida, id_motorista } = req.body;
+
+    if (!id_corrida || !id_motorista) {
+        return res.status(400).json({ erro: 'Faltam dados (id_corrida, id_motorista)' });
+    }
+
+    try {
+        const query = `
+            UPDATE corridas 
+            SET status = 'em_andamento', 
+                id_motorista = $1,
+                atualizado_em = NOW()
+            WHERE id = $2 AND status = 'pendente'
+            RETURNING *;
+        `;
+        
+        const dbRes = await pool.query(query, [id_motorista, id_corrida]);
+
+        if (dbRes.rowCount === 0) {
+            return res.status(409).json({ erro: 'Corrida não disponível ou já aceita.' });
+        }
+
+        const corridaAtualizada = dbRes.rows[0];
+        console.log(`✅ Corrida #${id_corrida} aceita pelo motorista ${id_motorista}`);
+
+        if(io) {
+            io.emit('status_corrida', {
+                tipo: 'ACEITA',
+                id_corrida: id_corrida,
+                id_motorista: id_motorista,
+                status: 'em_andamento',
+                msg: 'Motorista a caminho!'
+            });
+        }
+
+        // Retornamos apenas o que temos agora (a corrida atualizada)
+        res.json({ 
+            sucesso: true, 
+            status: 'em_andamento', 
+            corrida: corridaAtualizada 
+        });
+
+    } catch (error) {
+        console.error("Erro ao aceitar corrida:", error);
+        res.status(500).json({ erro: 'Erro interno' });
+    }
+});
+
 // ATENÇÃO: Mudou de 'app.listen' para 'server.listen'
 server.listen(PORTA_API, () => {
     console.log(`🚀 TripShare Backend rodando na porta ${PORTA_API}`);
 });
-//codigo by davidson
+//codigo by davidson 02/12/2025
