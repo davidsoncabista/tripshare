@@ -49,7 +49,14 @@ const REDIS_URL = process.env.REDIS_URL;
 // 5. INICIALIZAÇÃO DO SERVIDOR (EXPRESS + SOCKET)
 // ========================================================
 const app = express();
-app.use(cors());
+
+// CORS EXPANDIDO PARA MVP
+app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 app.use(express.json());
 app.use(express.static('public')); // Serve o Painel Web
 
@@ -88,9 +95,15 @@ io.on('connection', (socket) => {
 });
 
 // ========================================================
-// 8. MIDDLEWARE DE SEGURANÇA (JWT)
+// 8. MIDDLEWARE DE SEGURANÇA (JWT) - DESATIVADO PARA MVP
 // ========================================================
+// 🔧 PARA ATIVAR AUTENTICAÇÃO: remova o 'return next()' abaixo e use nas rotas
 function autenticarToken(req, res, next) {
+    // ⚠️ MODO MVP: DESATIVADO - remova a linha abaixo para ativar
+    return next();
+    
+    // ⬇️ CÓDIGO DE AUTENTICAÇÃO (comentado para MVP)
+    /*
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; 
 
@@ -101,6 +114,7 @@ function autenticarToken(req, res, next) {
         req.usuario = usuario;
         next();
     });
+    */
 }
 
 // ========================================================
@@ -146,21 +160,45 @@ app.post('/api/login', async (req, res) => {
 // 10. ROTAS PRINCIPAIS (CORRIDA)
 // ========================================================
 
-app.get('/', (req, res) => res.json({ status: 'TripShare API Online' }));
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'TripShare API Online',
+        versao: 'MVP-v1',
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.get('/api/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        api: 'tripshare',
+        modo: 'MVP (sem autenticação)',
+        tempo: new Date().toISOString()
+    });
+});
 
 // --- ROTA: SOLICITAR (PASSAGEIRO) ---
 app.post('/api/solicitar-corrida', async (req, res) => {
     try {
         const { id_passageiro, origem, destino } = req.body; 
-        if (!id_passageiro || !origem || !destino) return res.status(400).json({ erro: 'Dados incompletos' });
+        console.log(`📍 Corrida solicitada: Pass=${id_passageiro}, Orig=${origem}, Dest=${destino}`);
+        
+        if (!id_passageiro || !origem || !destino) {
+            return res.status(400).json({ erro: 'Dados incompletos', recebido: { id_passageiro, origem, destino } });
+        }
 
         // Cálculo OSRM
         const strOrigem = String(origem);
         const strDestino = String(destino);
         const urlOSRM = `${OSRM_URL_BASE}/${strOrigem};${strDestino}?overview=full&geometries=geojson`;
         
+        console.log(`🗺️ Consultando OSRM: ${urlOSRM}`);
         const response = await axios.get(urlOSRM);
-        if (response.data.code !== 'Ok') throw new Error('Erro OSRM');
+        
+        if (response.data.code !== 'Ok') {
+            console.error('❌ OSRM retornou erro:', response.data.code);
+            throw new Error(`Erro OSRM: ${response.data.code}`);
+        }
 
         const rota = response.data.routes[0];
         const km = rota.distance / 1000;
@@ -180,13 +218,16 @@ app.post('/api/solicitar-corrida', async (req, res) => {
         const novaCorrida = dbRes.rows[0];
 
         // Disparar Alerta Socket
-        if(io) io.to('motoristas_disponiveis').emit('alerta_corrida', {
-            id_corrida: novaCorrida.id, valor: preco,
-            distancia: `${km.toFixed(1)} km`, tempo: `${min.toFixed(0)} min`,
-            geometria: rota.geometry
-        });
+        if(io) {
+            io.to('motoristas_disponiveis').emit('alerta_corrida', {
+                id_corrida: novaCorrida.id, valor: preco,
+                distancia: `${km.toFixed(1)} km`, tempo: `${min.toFixed(0)} min`,
+                geometria: rota.geometry
+            });
+            console.log(`📢 Alerta enviado a motoristas via Socket.IO`);
+        }
 
-        console.log(`✅ Corrida #${novaCorrida.id} criada: R$ ${preco}`);
+        console.log(`✅ Corrida #${novaCorrida.id} criada: R$ ${preco} (${km.toFixed(1)}km)`);
         
         res.json({ 
             sucesso: true, 
@@ -198,15 +239,23 @@ app.post('/api/solicitar-corrida', async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Erro solicitar:", error.message);
-        res.status(500).json({ erro: 'Erro interno' });
+        console.error("❌ Erro solicitar:", error.message);
+        res.status(500).json({ 
+            erro: 'Erro interno', 
+            detalhes: error.message,
+            timestamp: new Date().toISOString()
+        });
     }
 });
 
 // --- ROTA: ACEITAR (MOTORISTA) ---
 app.post('/api/aceitar-corrida', async (req, res) => {
     const { id_corrida, id_motorista } = req.body;
-    if (!id_corrida || !id_motorista) return res.status(400).json({ erro: 'Faltam dados' });
+    console.log(`🚘 Tentativa aceitar: Corrida=${id_corrida}, Moto=${id_motorista}`);
+    
+    if (!id_corrida || !id_motorista) {
+        return res.status(400).json({ erro: 'Faltam dados', recebido: { id_corrida, id_motorista } });
+    }
 
     try {
         const dbRes = await pool.query(
@@ -214,32 +263,67 @@ app.post('/api/aceitar-corrida', async (req, res) => {
             [id_motorista, id_corrida]
         );
 
-        if (dbRes.rowCount === 0) return res.status(409).json({ erro: 'Corrida indisponível' });
+        if (dbRes.rowCount === 0) {
+            console.warn(`⚠️ Corrida #${id_corrida} não está disponível`);
+            return res.status(409).json({ erro: 'Corrida indisponível ou já aceita' });
+        }
 
         const corrida = dbRes.rows[0];
-        console.log(`✅ Corrida #${id_corrida} aceita por ${id_motorista}`);
+        console.log(`✅ Corrida #${id_corrida} aceita por motorista ${id_motorista}`);
 
-        if(io) io.emit('status_corrida', { tipo: 'ACEITA', id_corrida, id_motorista, status: 'em_andamento', msg: 'Motorista a caminho!' });
+        if(io) {
+            io.emit('status_corrida', { 
+                tipo: 'ACEITA', 
+                id_corrida, 
+                id_motorista, 
+                status: 'em_andamento', 
+                msg: 'Motorista a caminho!' 
+            });
+        }
 
         res.json({ sucesso: true, status: 'em_andamento', corrida });
-    } catch (error) { console.error("Erro aceitar:", error); res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (error) { 
+        console.error("❌ Erro aceitar:", error.message); 
+        res.status(500).json({ erro: 'Erro interno', detalhes: error.message }); 
+    }
 });
 
 // --- ROTA: FINALIZAR (MOTORISTA) ---
 app.post('/api/finalizar-corrida', async (req, res) => {
     const { id_corrida } = req.body;
+    console.log(`🏁 Finalizando corrida: ${id_corrida}`);
+    
+    if (!id_corrida) {
+        return res.status(400).json({ erro: 'ID da corrida necessário' });
+    }
+    
     try {
         const dbRes = await pool.query(
             "UPDATE corridas SET status = 'finalizada', finalizado_em = NOW() WHERE id = $1 RETURNING *",
             [id_corrida]
         );
-        if (dbRes.rowCount === 0) return res.status(404).json({ erro: 'Corrida não encontrada' });
+        
+        if (dbRes.rowCount === 0) {
+            console.warn(`⚠️ Corrida #${id_corrida} não encontrada`);
+            return res.status(404).json({ erro: 'Corrida não encontrada' });
+        }
 
-        console.log(`🏁 Corrida #${id_corrida} finalizada.`);
-        if(io) io.emit('status_corrida', { tipo: 'FINALIZADA', id_corrida, status: 'finalizada', msg: 'Viagem encerrada.' });
+        console.log(`✅ Corrida #${id_corrida} finalizada`);
+        
+        if(io) {
+            io.emit('status_corrida', { 
+                tipo: 'FINALIZADA', 
+                id_corrida, 
+                status: 'finalizada', 
+                msg: 'Viagem encerrada.' 
+            });
+        }
 
         res.json({ sucesso: true });
-    } catch (error) { console.error("Erro finalizar:", error); res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (error) { 
+        console.error("❌ Erro finalizar:", error.message); 
+        res.status(500).json({ erro: 'Erro interno', detalhes: error.message }); 
+    }
 });
 
 // ========================================================
@@ -259,5 +343,27 @@ app.get('/api/corridas/:usuario_id', async (req, res) => {
 // 12. START DO SERVIDOR
 // ========================================================
 server.listen(PORTA_API, () => {
-    console.log(`🚀 TripShare Backend rodando na porta ${PORTA_API}`);
+    console.log(`
+╔════════════════════════════════════════════════════════════╗
+║           🚀 TripShare Backend - MVP v1                   ║
+╠════════════════════════════════════════════════════════════╣
+║ Porta:                    ${PORTA_API}                        ║
+║ Base Price:               R$ ${PRECO_BASE}                        ║
+║ Price per km:             R$ ${PRECO_POR_KM}                      ║
+║ Price per min:            R$ ${PRECO_POR_MIN}                      ║
+║ Auth Mode:                DISABLED (MVP)                ║
+║ CORS:                     Aberto para todos              ║
+║ Socket.IO:                ✅ Ativo                         ║
+╠════════════════════════════════════════════════════════════╣
+║ Rotas disponíveis:                                       ║
+║ POST   /api/cadastrar                                    ║
+║ POST   /api/login                                        ║
+║ POST   /api/solicitar-corrida                            ║
+║ POST   /api/aceitar-corrida                              ║
+║ POST   /api/finalizar-corrida                            ║
+║ GET    /api/corridas/:usuario_id                         ║
+║ GET    /api/health                                       ║
+║ GET    /                                                 ║
+╚════════════════════════════════════════════════════════════╝
+    `);
 });
