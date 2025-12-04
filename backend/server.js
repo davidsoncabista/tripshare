@@ -81,7 +81,8 @@ io.on('connection', (socket) => {
 app.get('/', (req, res) => res.json({ status: 'TripShare API + Socket Realtime' }));
 
 // ROTA DE SOLICITAR CORRIDA
-app.post('/api/solicitar-corrida', async (req, res) => {
+// Note o 'autenticarToken' ali no meio
+app.post('/api/solicitar-corrida', autenticarToken, async (req, res) => { ...
     try {
         console.log("📥 Recebi pedido:", req.body); // LOG NOVO: Ver o que chegou do celular
 
@@ -303,6 +304,24 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ========================================================
+// --- MIDDLEWARE DE PROTEÇÃO 👮‍♂️ ---
+// ========================================================
+function autenticarToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    // O token vem assim: "Bearer eyJhbGc..."
+    const token = authHeader && authHeader.split(' ')[1]; 
+
+    if (!token) return res.status(401).json({ erro: 'Acesso negado. Faça login.' });
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, usuario) => {
+        if (err) return res.status(403).json({ erro: 'Token inválido ou expirado.' });
+        
+        req.usuario = usuario; // Salva os dados do user na requisição
+        next(); // Pode passar!
+    });
+}
+
+// ========================================================
 // NOVA ROTA: FINALIZAR CORRIDA 🏁
 // ========================================================
 app.post('/api/finalizar-corrida', async (req, res) => {
@@ -344,8 +363,35 @@ app.post('/api/finalizar-corrida', async (req, res) => {
     }
 });
 
+// ========================================================
+// NOVA ROTA: HISTÓRICO DE CORRIDAS 📜
+// ========================================================
+app.get('/api/corridas/:usuario_id', async (req, res) => {
+    const { usuario_id } = req.params;
+
+    try {
+        // Busca corridas onde o usuário foi passageiro OU motorista
+        // Ordena da mais recente para a mais antiga
+        const query = `
+            SELECT id, origem_texto, destino_texto, valor_total, status, criado_em, distancia_km 
+            FROM corridas 
+            WHERE id_passageiro = $1 OR id_motorista = $1
+            ORDER BY id DESC
+            LIMIT 20;
+        `;
+        
+        const dbRes = await pool.query(query, [usuario_id]);
+        
+        res.json({ sucesso: true, historico: dbRes.rows });
+
+    } catch (error) {
+        console.error("Erro histórico:", error);
+        res.status(500).json({ erro: 'Erro ao buscar histórico' });
+    }
+});
+
 // ATENÇÃO: Mudou de 'app.listen' para 'server.listen'
 server.listen(PORTA_API, () => {
     console.log(`🚀 TripShare Backend rodando na porta ${PORTA_API}`);
 });
-//codigo by davidson 02/12/2025
+// Código desenvolvido por Davidson. Inicializado em 28/11/2025.
